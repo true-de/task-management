@@ -1,7 +1,3 @@
-# task-management
-A comprehensive PHP/MySQL web application for efficient task management within teams. Features include task creation, assignment, prioritization, and tracking with a responsive Bootstrap UI. Includes user management, task filtering, visual indicators, and a RESTful API.
-
-
 # Task Management System
 
 A comprehensive web-based application designed to help teams organize, track, and manage tasks efficiently. Built with PHP and MySQL, this system provides a robust solution for task creation, assignment, prioritization, and monitoring.
