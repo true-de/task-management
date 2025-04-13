@@ -41,7 +41,7 @@ A comprehensive web-based application designed to help teams organize, track, an
 ## 📂 Directory Structure
 
 ```
-/
+task-management/
 ├── api.php                 # Main API router
 ├── api_handler.php         # Process API requests
 ├── config.php              # Configuration settings
