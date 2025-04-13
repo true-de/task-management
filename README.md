@@ -229,7 +229,7 @@ This project is open-sourced under the [MIT License](LICENSE).
 
 ## 👥 Authors
 
-- **Kynsai Kharsyntiew ** 
+- Kynsai Kharsyntiew
 
 ## 🙏 Acknowledgments
 
