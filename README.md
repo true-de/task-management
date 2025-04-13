@@ -170,6 +170,14 @@ CREATE TABLE IF NOT EXISTS tasks (
 }
 ```
 
+## Screenshots
+
+![All Task](image/img1.png)
+![Add New Task](image/img2.png)
+![User Management](image/img3.png)
+![View Task Detail](image/img4.png)
+![Edit Task](image/img5.png)
+
 ## ✨ Future Enhancements
 
 ### Short-Term (1-2 Weeks)
