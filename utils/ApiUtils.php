@@ -29,16 +29,16 @@ class ApiUtils
     /**
      * Sanitizes a string for database operations
      *
-     * @param mysqli $conn Database connection
+     * @param PDO $pdo Database connection
      * @param string $string String to sanitize
      * @return string Sanitized string
      */
-    public static function sanitizeString($conn, $string)
+    public static function sanitizeString($pdo, $string)
     {
         if ($string === null) {
             return null;
         }
-        return $conn->real_escape_string(trim($string));
+        return trim($string);
     }
 
     /**

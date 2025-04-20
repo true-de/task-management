@@ -3,11 +3,11 @@
 
 class TaskController
 {
-    private $conn;
+    private $pdo;
 
-    public function __construct($conn)
+    public function __construct($pdo)
     {
-        $this->conn = $conn;
+        $this->pdo = $pdo;
     }
 
     // Get all tasks
@@ -46,37 +46,40 @@ class TaskController
         // Order by deadline
         $query .= " ORDER BY t.deadline ASC";
 
-        $result = $this->conn->query($query);
-
-        if ($result) {
-            $tasks = [];
-            while ($row = $result->fetch_assoc()) {
-                $tasks[] = $row;
-            }
+        try {
+            $stmt = $this->pdo->query($query);
+            $tasks = $stmt->fetchAll(PDO::FETCH_ASSOC);
             echo json_encode(['tasks' => $tasks]);
-        } else {
+        } catch (PDOException $e) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to fetch tasks: ' . $this->conn->error]);
+            echo json_encode(['error' => 'Failed to fetch tasks: ' . $e->getMessage()]);
         }
     }
 
     // Get specific task
     public function getTask($id)
     {
-        $id = $this->conn->real_escape_string($id);
         $query = "SELECT t.*, u.full_name as assignee_name 
                 FROM tasks t 
                 LEFT JOIN users u ON t.assignee_id = u.user_id 
-                WHERE t.task_id = '$id'";
+                WHERE t.task_id = :id";
 
-        $result = $this->conn->query($query);
+        try {
+            $stmt = $this->pdo->prepare($query);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
 
-        if ($result && $result->num_rows > 0) {
-            $task = $result->fetch_assoc();
-            echo json_encode(['task' => $task]);
-        } else {
-            http_response_code(404);
-            echo json_encode(['error' => 'Task not found']);
+            $task = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($task) {
+                echo json_encode(['task' => $task]);
+            } else {
+                http_response_code(404);
+                echo json_encode(['error' => 'Task not found']);
+            }
+        } catch (PDOException $e) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Failed to fetch task: ' . $e->getMessage()]);
         }
     }
 
@@ -91,44 +94,48 @@ class TaskController
         }
 
         // Prepare data for insertion
-        $title = $this->conn->real_escape_string($data['title']);
-        $description = isset($data['description']) ? $this->conn->real_escape_string($data['description']) : '';
-        $deadline = isset($data['deadline']) && !empty($data['deadline']) ? $this->conn->real_escape_string($data['deadline']) : NULL;
-        $priority = isset($data['priority']) ? $this->conn->real_escape_string($data['priority']) : 'medium';
-        $assignee_id = isset($data['assignee_id']) && !empty($data['assignee_id']) ? intval($data['assignee_id']) : NULL;
+        $title = $data['title'];
+        $description = isset($data['description']) ? $data['description'] : '';
+        $deadline = isset($data['deadline']) && !empty($data['deadline']) ? $data['deadline'] : NULL;
+        $priority = isset($data['priority']) ? $data['priority'] : 'medium';
+        $assignee_id = isset($data['assignee_id']) && !empty($data['assignee_id']) ? $data['assignee_id'] : NULL;
 
         // Create query
-        $query = "INSERT INTO tasks (title, description, deadline, priority, assignee_id) VALUES (?, ?, ?, ?, ?)";
+        $query = "INSERT INTO tasks (title, description, deadline, priority, assignee_id) VALUES (:title, :description, :deadline, :priority, :assignee_id)";
 
-        $stmt = $this->conn->prepare($query);
-        $stmt->bind_param("ssssi", $title, $description, $deadline, $priority, $assignee_id);
+        try {
+            $stmt = $this->pdo->prepare($query);
+            $stmt->bindParam(':title', $title, PDO::PARAM_STR);
+            $stmt->bindParam(':description', $description, PDO::PARAM_STR);
+            $stmt->bindParam(':deadline', $deadline, PDO::PARAM_STR);
+            $stmt->bindParam(':priority', $priority, PDO::PARAM_STR);
+            $stmt->bindParam(':assignee_id', $assignee_id, PDO::PARAM_INT);
 
-        if ($stmt->execute()) {
-            $task_id = $this->conn->insert_id;
+            if ($stmt->execute()) {
+                $task_id = $this->pdo->lastInsertId();
 
-            // Get the created task
-            $query = "SELECT t.*, u.full_name as assignee_name 
-                    FROM tasks t 
-                    LEFT JOIN users u ON t.assignee_id = u.user_id 
-                    WHERE t.task_id = $task_id";
+                // Get the created task
+                $query = "SELECT t.*, u.full_name as assignee_name 
+                        FROM tasks t 
+                        LEFT JOIN users u ON t.assignee_id = u.user_id 
+                        WHERE t.task_id = :task_id";
 
-            $result = $this->conn->query($query);
-            $task = $result->fetch_assoc();
+                $stmt = $this->pdo->prepare($query);
+                $stmt->bindParam(':task_id', $task_id, PDO::PARAM_INT);
+                $stmt->execute();
+                $task = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode(['success' => true, 'message' => 'Task added successfully', 'task' => $task]);
-        } else {
+                echo json_encode(['success' => true, 'message' => 'Task added successfully', 'task' => $task]);
+            }
+        } catch (PDOException $e) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to add task: ' . $stmt->error]);
+            echo json_encode(['error' => 'Failed to add task: ' . $e->getMessage()]);
         }
-
-        $stmt->close();
     }
 
     // Update task
     public function updateTask($id, $data)
     {
-        $id = intval($id);
-
         // Validate required fields
         if (!isset($data['title']) || empty($data['title'])) {
             http_response_code(400);
@@ -137,50 +144,56 @@ class TaskController
         }
 
         // Prepare data for update
-        $title = $this->conn->real_escape_string($data['title']);
-        $description = isset($data['description']) ? $this->conn->real_escape_string($data['description']) : '';
-        $deadline = isset($data['deadline']) && !empty($data['deadline']) ? $this->conn->real_escape_string($data['deadline']) : NULL;
-        $priority = isset($data['priority']) ? $this->conn->real_escape_string($data['priority']) : 'medium';
+        $title = $data['title'];
+        $description = isset($data['description']) ? $data['description'] : '';
+        $deadline = isset($data['deadline']) && !empty($data['deadline']) ? $data['deadline'] : NULL;
+        $priority = isset($data['priority']) ? $data['priority'] : 'medium';
         $completed = isset($data['completed']) ? intval($data['completed']) : 0;
-        $assignee_id = isset($data['assignee_id']) && !empty($data['assignee_id']) ? intval($data['assignee_id']) : NULL;
+        $assignee_id = isset($data['assignee_id']) && !empty($data['assignee_id']) ? $data['assignee_id'] : NULL;
 
         // Create query
         $query = "UPDATE tasks SET 
-                title = ?, 
-                description = ?, 
-                deadline = ?, 
-                priority = ?, 
-                completed = ?, 
-                assignee_id = ? 
-                WHERE task_id = ?";
+                title = :title, 
+                description = :description, 
+                deadline = :deadline, 
+                priority = :priority, 
+                completed = :completed, 
+                assignee_id = :assignee_id 
+                WHERE task_id = :id";
 
-        $stmt = $this->conn->prepare($query);
-        $stmt->bind_param("ssssiis", $title, $description, $deadline, $priority, $completed, $assignee_id, $id);
+        try {
+            $stmt = $this->pdo->prepare($query);
+            $stmt->bindParam(':title', $title, PDO::PARAM_STR);
+            $stmt->bindParam(':description', $description, PDO::PARAM_STR);
+            $stmt->bindParam(':deadline', $deadline, PDO::PARAM_STR);
+            $stmt->bindParam(':priority', $priority, PDO::PARAM_STR);
+            $stmt->bindParam(':completed', $completed, PDO::PARAM_INT);
+            $stmt->bindParam(':assignee_id', $assignee_id, PDO::PARAM_INT);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
-        if ($stmt->execute()) {
-            // Get the updated task
-            $query = "SELECT t.*, u.full_name as assignee_name 
-                    FROM tasks t 
-                    LEFT JOIN users u ON t.assignee_id = u.user_id 
-                    WHERE t.task_id = $id";
+            if ($stmt->execute()) {
+                // Get the updated task
+                $query = "SELECT t.*, u.full_name as assignee_name 
+                        FROM tasks t 
+                        LEFT JOIN users u ON t.assignee_id = u.user_id 
+                        WHERE t.task_id = :id";
 
-            $result = $this->conn->query($query);
-            $task = $result->fetch_assoc();
+                $stmt = $this->pdo->prepare($query);
+                $stmt->bindParam(':id', $id, PDO::PARAM_INT);
+                $stmt->execute();
+                $task = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            echo json_encode(['success' => true, 'message' => 'Task updated successfully', 'task' => $task]);
-        } else {
+                echo json_encode(['success' => true, 'message' => 'Task updated successfully', 'task' => $task]);
+            }
+        } catch (PDOException $e) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to update task: ' . $stmt->error]);
+            echo json_encode(['error' => 'Failed to update task: ' . $e->getMessage()]);
         }
-
-        $stmt->close();
     }
 
     // Update task status only
     public function updateTaskStatus($id, $data)
     {
-        $id = intval($id);
-
         // Validate required fields
         if (!isset($data['completed'])) {
             http_response_code(400);
@@ -191,39 +204,38 @@ class TaskController
         $completed = intval($data['completed']);
 
         // Create query
-        $query = "UPDATE tasks SET completed = ? WHERE task_id = ?";
+        $query = "UPDATE tasks SET completed = :completed WHERE task_id = :id";
 
-        $stmt = $this->conn->prepare($query);
-        $stmt->bind_param("ii", $completed, $id);
+        try {
+            $stmt = $this->pdo->prepare($query);
+            $stmt->bindParam(':completed', $completed, PDO::PARAM_INT);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'message' => 'Task status updated successfully']);
-        } else {
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Task status updated successfully']);
+            }
+        } catch (PDOException $e) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to update task status: ' . $stmt->error]);
+            echo json_encode(['error' => 'Failed to update task status: ' . $e->getMessage()]);
         }
-
-        $stmt->close();
     }
 
     // Delete task
     public function deleteTask($id)
     {
-        $id = intval($id);
-
         // Create query
-        $query = "DELETE FROM tasks WHERE task_id = ?";
+        $query = "DELETE FROM tasks WHERE task_id = :id";
 
-        $stmt = $this->conn->prepare($query);
-        $stmt->bind_param("i", $id);
+        try {
+            $stmt = $this->pdo->prepare($query);
+            $stmt->bindParam(':id', $id, PDO::PARAM_INT);
 
-        if ($stmt->execute()) {
-            echo json_encode(['success' => true, 'message' => 'Task deleted successfully']);
-        } else {
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Task deleted successfully']);
+            }
+        } catch (PDOException $e) {
             http_response_code(500);
-            echo json_encode(['error' => 'Failed to delete task: ' . $stmt->error]);
+            echo json_encode(['error' => 'Failed to delete task: ' . $e->getMessage()]);
         }
-
-        $stmt->close();
     }
 }

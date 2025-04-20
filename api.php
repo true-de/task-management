@@ -2,7 +2,7 @@
 // api.php - Main router for Task Management System API
 
 // Database connection
-require_once 'db_connection.php';
+require_once 'config.php'; // Using config.php instead of db_connection.php
 require_once 'controllers/TaskController.php';
 require_once 'controllers/UserController.php';
 
@@ -23,9 +23,9 @@ $method = $_SERVER['REQUEST_METHOD'];
 // Get endpoint
 $endpoint = isset($_GET['endpoint']) ? $_GET['endpoint'] : '';
 
-// Initialize controllers
-$taskController = new TaskController($conn);
-$userController = new UserController($conn);
+// Initialize controllers with PDO connection
+$taskController = new TaskController($pdo);
+$userController = new UserController($pdo);
 
 // Process request based on method and endpoint
 switch ($method) {
